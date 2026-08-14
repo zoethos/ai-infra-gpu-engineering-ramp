@@ -1,0 +1,45 @@
+# GitHub Pages configuration — Just the Docs theme for the /docs learning site.
+# Pages publishes this repo from the root of main; files without front matter
+# (including the root index.html and docs/how-machines-learn/) pass through
+# untouched, while the markdown pages under docs/ get the theme.
+remote_theme: just-the-docs/just-the-docs
+plugins:
+  - jekyll-remote-theme
+
+title: AI Infra & GPU Ramp
+description: A documented AI infrastructure & GPU engineering learning journey
+url: "https://trocca.github.io"
+baseurl: "/ai-infra-gpu-engineering-ramp"
+
+color_scheme: light
+search_enabled: true
+heading_anchors: true
+
+# Apply the theme layout to every page with front matter (files without front
+# matter — the root index.html, docs/how-machines-learn/ — stay static).
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+
+aux_links:
+  "GitHub repo":
+    - "https://github.com/trocca/ai-infra-gpu-engineering-ramp"
+
+nav_external_links:
+  - title: ML Foundations chapter
+    url: /ai-infra-gpu-engineering-ramp/docs/how-machines-learn/
+    hide_icon: true
+
+# Keep Jekyll away from sources and local files — only docs/ pages are built.
+exclude:
+  - cpp-cuda-track/
+  - tools/
+  - README.md
+  - LICENSE
+  - Gemfile
+  - Gemfile.lock
+  - vendor/
+  - "*.pdf"
+  - "*.epub"
