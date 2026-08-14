@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>12 · Capstone: PyTorch extension — C++ ↔ CUDA Track</title>
+<link rel="stylesheet" href="../../site.css">
+</head>
+<body>
+<div class="wrap">
+<nav class="sitenav">
+  <a class="brand" href="../../">AI Infra &amp; GPU Ramp</a>
+  <a href="../../">Home</a>
+  <a href="../../how-machines-learn/">ML Foundations</a>
+  <a href="../../track/" class="here">C++&hairsp;&harr;&hairsp;CUDA Track</a>
+  <a href="../../glossary/">Glossary</a>
+  <a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp">GitHub</a>
+</nav>
+<div class="metastrip">
+  <span class="badge stageD">Stage D</span>
+  <span>&#8987; ~6h</span>
+  <span>&#128280; prerequisites: <a href="../11-multi-device/">module 11</a></span>
+  <span>&#128193; <a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp/blob/main/cpp-cuda-track/12-capstone-pytorch-extension">lab source on GitHub</a></span>
+</div>
+<div class="content">
+<h1>12 — Capstone: one custom PyTorch op, both backends</h1>
+<p>Everything converges: write a <strong>fused softmax</strong> (or fused
+bias+GeLU — your choice) as a PyTorch extension with a CPU (C++/OpenMP) and a
+GPU (CUDA) implementation, registered through the dispatcher so
+<code>torch.ops.ramp.fused_softmax(x)</code> routes by device — exactly how ATen itself is
+built. This is the "PyTorch architecture" briefing made concrete.</p>
+<h2>Why fused softmax</h2>
+<p>Softmax over the last dim = max-reduce, subtract+exp (elementwise), sum-reduce,
+divide — i.e., modules 03 and 04 composed. Unfused, that's 4 kernels and 4
+round trips to memory; fused, one kernel that keeps the row in
+registers/shared memory. It's the canonical memory-bound fusion win and (with
+the online-softmax trick) the seed of FlashAttention.</p>
+<h2>Plan</h2>
+<ol>
+<li><strong>Scaffold</strong> — <code>torch.utils.cpp_extension</code> with <code>load()</code> for iteration:
+   <code>csrc/ops.cpp</code> (bindings + CPU impl), <code>csrc/softmax.cu</code> (kernel). Register
+   with <code>TORCH_LIBRARY(ramp, m)</code> + <code>TORCH_LIBRARY_IMPL(ramp, CPU/CUDA, m)</code> —
+   the dispatcher does the device routing, not your Python.</li>
+<li><strong>CPU impl</strong> — OpenMP over rows; each row: max, exp-sum, divide. Use
+   <code>at::parallel_for</code> (plays nice with PyTorch's intra-op thread pool —
+   spawning your own OpenMP region inside PyTorch is a classic oversubscription
+   bug).</li>
+<li><strong>CUDA impl</strong> — one block per row (rows ≤ 4K): grid-stride load to
+   registers, warp/block max-reduce (module 04's funnel, with <code>max</code> instead of
+   <code>+</code>), exp + block sum-reduce, divide, coalesced store. Handle the &gt;1-block
+   row as a stretch goal with online softmax.</li>
+<li><strong>Verify</strong> — <code>torch.testing.assert_close</code> vs <code>torch.softmax</code> on CPU and GPU,
+   fp32 and bf16, including a <code>requires_grad</code> note: without a backward
+   registration, autograd correctly <em>refuses</em> — register a
+   <code>torch.autograd.Function</code> or an <code>Autograd</code> dispatch key impl and re-derive
+   the softmax backward by hand.</li>
+<li><strong>Measure</strong> — benchmark vs <code>torch.softmax</code> and vs <code>torch.compile</code>'s fused
+   version across row lengths. Inductor's generated Triton will likely match or
+   beat your kernel; read the generated code (<code>TORCH_LOGS=output_code</code>) and
+   note what it did that you didn't.</li>
+</ol>
+<h2>Definition of done</h2>
+<ul>
+<li>[ ] <code>pytest</code> file: correctness CPU+CUDA, fp32+bf16, odd shapes, empty tensor</li>
+<li>[ ] backward implemented and gradcheck passes (fp64 CPU)</li>
+<li>[ ] benchmark table: yours vs eager vs compiled, 3 row lengths</li>
+<li>[ ] half-page NOTES.md: where your kernel loses to Inductor and why</li>
+<li>[ ] stretch: online softmax for arbitrarily long rows; bf16 in / fp32 accumulate</li>
+</ul>
+<h2>References</h2>
+<ul>
+<li>PyTorch docs: "Custom C++ and CUDA Extensions", "The Custom Operators Manual",
+  <code>TORCH_LIBRARY</code> registration API.</li>
+<li>Milakov &amp; Gimelshein, "Online normalizer calculation for softmax" (2018).</li>
+<li>PyTorch source: <code>aten/src/ATen/native/cuda/SoftMax.cu</code> — read after writing
+  yours, not before.</li>
+</ul>
+<h2>Lab</h2>
+<ul>
+<li><a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp/blob/main/cpp-cuda-track/12-capstone-pytorch-extension/csrc/ops.cpp"><code>csrc/ops.cpp</code></a> — plan steps 1–2: schema + <code>TORCH_LIBRARY</code> registration, CPU impl on <code>at::parallel_for</code>.</li>
+<li><a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp/blob/main/cpp-cuda-track/12-capstone-pytorch-extension/csrc/softmax.cu"><code>csrc/softmax.cu</code></a> — plan step 3: one-block-per-row fused kernel reusing module 04's funnel.</li>
+<li><a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp/blob/main/cpp-cuda-track/12-capstone-pytorch-extension/lab.py"><code>lab.py</code></a> — JIT-builds the extension, verifies against <code>torch.softmax</code> (CPU &amp; CUDA), benchmarks vs eager and <code>torch.compile</code>. Run: <code>python lab.py</code></li>
+<li>Plan steps 4–5 (backward + beating Inductor) are the exercise — the scaffold stops where the learning starts.</li>
+</ul>
+<h2>Companion reading</h2>
+<ul>
+<li>Fregly, <em>AI Systems Performance Engineering</em>: Ch. 13 (profiling/tuning PyTorch — profile your op in a real model), Ch. 14 (torch.compile internals and Triton — read after step 5's <code>TORCH_LOGS=output_code</code> comparison).</li>
+<li>After this module, the book's Ch. 15–20 (inference at scale: disaggregated prefill/decode, KV-cache tuning) are the natural sequel track.</li>
+</ul>
+</div>
+<div class="pager"><a href="../11-multi-device/">&larr; 11 · Multi-device</a><span class="spacer"></span><a href="../../">Finish line — back to Home &rarr;</a></div>
+<footer class="site">
+  Part of <a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp">ai-infra-gpu-engineering-ramp</a>
+  — a documented AI infrastructure learning journey. Site rebuilt from the repo's markdown by
+  <a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp/blob/main/tools/build_site.py">tools/build_site.py</a>.
+</footer>
+</div>
+</body>
+</html>

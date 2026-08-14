@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="920" viewBox="0 0 1240 920" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect width="1240" height="920" fill="#ffffff"/>
+  <text x="620" y="46" text-anchor="middle" font-size="27" font-weight="bold" fill="#1a2233">Il ciclo di addestramento — e la sua algebra</text>
+  <text x="620" y="72" text-anchor="middle" font-size="15" fill="#64748b">lo stesso identico giro, dal &#171;gioco delle case&#187; a GPT</text>
+
+  <!-- ============ BOX 1: FORWARD ============ -->
+  <rect x="60" y="100" width="520" height="180" rx="12" fill="#f5f7fa" stroke="#d0d7e2" stroke-width="1.5"/>
+  <text x="84" y="134" font-size="21" font-weight="bold" fill="#1a2233">1 &#183; FORWARD &#8212; model(x)</text>
+  <text x="84" y="160" font-size="14.5" fill="#475569">i dati attraversano la rete coi pesi attuali:</text>
+  <text x="84" y="179" font-size="14.5" fill="#475569">&#8220;prova&#8221; &#8212; il conto 7 &#215; 50 delle case</text>
+  <rect x="84" y="196" width="472" height="52" rx="8" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="320" y="222" text-anchor="middle" font-size="17.5" font-family="Menlo, Consolas, monospace" fill="#3730a3">&#375; = W&#8322; &#183; ReLU(W&#8321;&#183;x + b&#8321;) + b&#8322;</text>
+  <text x="320" y="241" text-anchor="middle" font-size="12.5" fill="#6366f1">ogni W&#183;x &#232; un matmul &#8594; cuBLAS &#8594; GPU</text>
+
+  <!-- ============ BOX 2: LOSS ============ -->
+  <rect x="660" y="100" width="520" height="180" rx="12" fill="#f5f7fa" stroke="#d0d7e2" stroke-width="1.5"/>
+  <text x="684" y="134" font-size="21" font-weight="bold" fill="#1a2233">2 &#183; LOSS &#8212; quanto ho sbagliato</text>
+  <text x="684" y="160" font-size="14.5" fill="#475569">confronta previsione &#375; e verit&#224; y su un batch:</text>
+  <text x="684" y="179" font-size="14.5" fill="#475569">tutta la rete giudicata da UN numero solo</text>
+  <rect x="684" y="196" width="472" height="52" rx="8" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="920" y="222" text-anchor="middle" font-size="17.5" font-family="Menlo, Consolas, monospace" fill="#3730a3">L = &#185;&#8260;&#8345; &#931;&#7522; (&#375;&#7522; &#8722; y&#7522;)&#178;</text>
+  <text x="920" y="241" text-anchor="middle" font-size="12.5" fill="#6366f1">MSE; per il linguaggio si usa la cross-entropy</text>
+
+  <!-- ============ BOX 3: GRADIENTE ============ -->
+  <rect x="660" y="350" width="520" height="180" rx="12" fill="#f5f7fa" stroke="#d0d7e2" stroke-width="1.5"/>
+  <text x="684" y="384" font-size="21" font-weight="bold" fill="#1a2233">3 &#183; GRADIENTE &#8212; loss.backward()</text>
+  <text x="684" y="410" font-size="14.5" fill="#475569">per OGNI peso: &#8220;alzarlo fa salire o scendere L?&#8221;</text>
+  <text x="684" y="429" font-size="14.5" fill="#475569">la bussola &#8212; regola della catena, a ritroso</text>
+  <rect x="684" y="446" width="472" height="52" rx="8" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="920" y="472" text-anchor="middle" font-size="17" font-family="Menlo, Consolas, monospace" fill="#3730a3">&#8706;L/&#8706;W&#8321; = &#8706;L/&#8706;&#375; &#183; &#8706;&#375;/&#8706;h &#183; &#8706;h/&#8706;W&#8321;</text>
+  <text x="920" y="491" text-anchor="middle" font-size="12.5" fill="#6366f1">ogni peso riceve il suo .grad (stessa forma del peso)</text>
+
+  <!-- ============ BOX 4: OTTIMIZZATORE ============ -->
+  <rect x="60" y="350" width="520" height="180" rx="12" fill="#f5f7fa" stroke="#d0d7e2" stroke-width="1.5"/>
+  <text x="84" y="384" font-size="21" font-weight="bold" fill="#1a2233">4 &#183; OTTIMIZZATORE &#8212; step()</text>
+  <text x="84" y="410" font-size="14.5" fill="#475569">sposta ogni peso di un millimetro contro il gradiente:</text>
+  <text x="84" y="429" font-size="14.5" fill="#475569">&#8220;stavo basso &#8594; alzo un po&#8217;&#8221;</text>
+  <rect x="84" y="446" width="472" height="52" rx="8" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="320" y="472" text-anchor="middle" font-size="17.5" font-family="Menlo, Consolas, monospace" fill="#3730a3">W &#8592; W &#8722; &#951; &#183; &#8706;L/&#8706;W</text>
+  <text x="320" y="491" text-anchor="middle" font-size="12.5" fill="#6366f1">&#951; = learning rate (SGD); Adam aggiunge memoria dei passi</text>
+
+  <!-- ============ ARROWS (clockwise) ============ -->
+  <line x1="584" y1="190" x2="654" y2="190" stroke="#64748b" stroke-width="3" marker-end="url(#arr)"/>
+  <line x1="920" y1="284" x2="920" y2="344" stroke="#64748b" stroke-width="3" marker-end="url(#arr)"/>
+  <line x1="656" y1="440" x2="586" y2="440" stroke="#64748b" stroke-width="3" marker-end="url(#arr)"/>
+  <line x1="320" y1="346" x2="320" y2="286" stroke="#64748b" stroke-width="3" marker-end="url(#arr)"/>
+  <text x="620" y="320" text-anchor="middle" font-size="14" font-weight="bold" fill="#94a3b8">&#8635; ripeti migliaia di volte</text>
+  <text x="620" y="338" text-anchor="middle" font-size="12.5" fill="#94a3b8">la funzione casuale iniziale viene scolpita verso quella giusta</text>
+
+  <!-- ============ TRANSFORMER BAND ============ -->
+  <rect x="60" y="580" width="1120" height="310" rx="12" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+  <text x="84" y="618" font-size="21" font-weight="bold" fill="#9a3412">TRANSFORMER &#8212; dove &#8220;si complica&#8221; (ma il ciclo resta identico)</text>
+  <text x="84" y="646" font-size="14.5" fill="#7c2d12">Il forward smette di essere due strati e diventa una pila di blocchi di attention. L&#8217;algebra nuova &#232; una sola:</text>
+
+  <rect x="84" y="664" width="1072" height="56" rx="8" fill="#ffedd5" stroke="#fdba74"/>
+  <text x="620" y="692" text-anchor="middle" font-size="18.5" font-family="Menlo, Consolas, monospace" fill="#9a3412">Attention(Q, K, V) = softmax( Q&#183;K&#7488; / &#8730;d&#8342; ) &#183; V</text>
+  <text x="620" y="712" text-anchor="middle" font-size="12.5" fill="#c2410c">con Q = X&#183;W&#81; &#8201; K = X&#183;W&#8342; &#8201; V = X&#183;W&#7515; &#8212; ogni token &#8220;guarda&#8221; tutti gli altri e pesa quanto ascoltarli</text>
+
+  <text x="84" y="752" font-size="14.5" fill="#7c2d12">&#8226; Dentro la formula: solo matmul e una softmax &#8212; niente che tu non conosca gi&#224; (softmax = il tuo kernel del capstone!)</text>
+  <text x="84" y="776" font-size="14.5" fill="#7c2d12">&#8226; La complicazione vera &#232; la SCALA: miliardi di pesi &#215; migliaia di token &#215; decine di layer &#8594; serve tiling, FlashAttention, NCCL</text>
+  <text x="84" y="800" font-size="14.5" fill="#7c2d12">&#8226; Ma loss, gradiente e ottimizzatore non cambiano di una virgola: stesso ciclo 1&#8594;2&#8594;3&#8594;4 del gioco delle case</text>
+
+  <rect x="84" y="822" width="1072" height="46" rx="8" fill="#fef3c7" stroke="#fde68a"/>
+  <text x="620" y="850" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#92400e">1 peso (case) &#8594; 3 pesi (1 piega) &#8594; 100k pesi (Sequential) &#8594; 10&#185;&#178; pesi (GPT): cambia il costo dei conti, mai il gioco</text>
+</svg>

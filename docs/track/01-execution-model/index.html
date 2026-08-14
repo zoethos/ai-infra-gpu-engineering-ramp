@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>01 · Execution model — C++ ↔ CUDA Track</title>
+<link rel="stylesheet" href="../../site.css">
+</head>
+<body>
+<div class="wrap">
+<nav class="sitenav">
+  <a class="brand" href="../../">AI Infra &amp; GPU Ramp</a>
+  <a href="../../">Home</a>
+  <a href="../../how-machines-learn/">ML Foundations</a>
+  <a href="../../track/" class="here">C++&hairsp;&harr;&hairsp;CUDA Track</a>
+  <a href="../../glossary/">Glossary</a>
+  <a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp">GitHub</a>
+</nav>
+<div class="metastrip">
+  <span class="badge stageA">Stage A</span>
+  <span>&#8987; ~2h</span>
+  <span>&#128280; prerequisites: none — start here</span>
+  <span>&#128193; <a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp/blob/main/cpp-cuda-track/01-execution-model">lab source on GitHub</a></span>
+</div>
+<div class="content">
+<h1>01 — Execution Model: who runs where</h1>
+<p>The single most important delta between the stacks. Everything later is a
+consequence of this module.</p>
+<h2>Concept</h2>
+<p><strong>CPU:</strong> a handful of fat cores (8–128), each running one heavyweight thread
+(plus an SMT sibling). Threads are expensive (~µs to create, kernel-scheduled),
+so you create few and keep them busy. Latency is hidden by <em>caches and
+out-of-order execution</em> inside each core.</p>
+<p><strong>GPU:</strong> ~100–150 Streaming Multiprocessors (SMs), each juggling thousands of
+featherweight threads grouped in <strong>warps of 32</strong> that execute in lockstep
+(SIMT). Threads are nearly free; you launch millions. Latency is hidden by
+<em>oversubscription</em> — when a warp stalls on memory, the SM switches to another
+resident warp in one cycle. There is no OS scheduler in the loop.</p>
+<p>The launch hierarchy: a <strong>grid</strong> of <strong>blocks</strong>, each block a group of up to 1024
+threads that lands on exactly one SM and can cooperate through shared memory and
+<code>__syncthreads()</code>. Blocks are independent by design — that independence is what
+lets the same binary scale from 20 SMs to 150.</p>
+<h2>Confrontation</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Question</th>
+<th>C++ answer</th>
+<th>CUDA answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cost of one thread?</td>
+<td>~µs create, ~8 MB stack, kernel object</td>
+<td>~nothing; register slice on an SM</td>
+</tr>
+<tr>
+<td>Right number of threads?</td>
+<td>≈ core count</td>
+<td>≥ 10× the number that "fits" (oversubscribe)</td>
+</tr>
+<tr>
+<td>Who schedules?</td>
+<td>OS kernel, preemptive, ~ms slices</td>
+<td>SM warp scheduler, per-cycle</td>
+</tr>
+<tr>
+<td>What hides a cache/memory miss?</td>
+<td>OoO window, prefetcher</td>
+<td>another resident warp</td>
+</tr>
+<tr>
+<td><code>printf</code> from 10 000 threads?</td>
+<td>interleaved lines, mutex needed for sanity</td>
+<td>works (buffered), order undefined</td>
+</tr>
+</tbody>
+</table></div>
+<h2>Build &amp; run</h2>
+<pre><code class="language-bash">g++ -O3 -std=c++20 -pthread cpp/hello_threads.cpp -o hello_cpu &amp;&amp; ./hello_cpu
+nvcc -O3 -arch=native cuda/hello_kernel.cu -o hello_gpu &amp;&amp; ./hello_gpu
+</code></pre>
+<h2>Exercises</h2>
+<ol>
+<li>In the CPU version, raise the thread count to 10 000. Watch creation time
+   explode. Find the count where wall time is minimized (spoiler: ≈ your core
+   count). In the CUDA version, raise the grid to 10 M threads. Nothing bad
+   happens. Explain both outcomes in two sentences each.</li>
+<li>Print <code>blockIdx</code>/<code>threadIdx</code> for a 4-block launch several times. The <em>block</em>
+   execution order changes between runs; the order <em>within a warp</em> doesn't. Why?</li>
+<li>Query your GPU with <code>cudaGetDeviceProperties</code> (the CUDA example does):
+   compute capability, SM count, max resident threads/SM. Compute the maximum
+   number of threads in flight and compare with your CPU's.</li>
+</ol>
+<h2>References</h2>
+<ul>
+<li>CUDA C++ Programming Guide §2 "Programming Model".</li>
+<li>Hennessy &amp; Patterson, "Computer Architecture", GPU chapter — the SIMT section.</li>
+</ul>
+<h2>Companion reading</h2>
+<ul>
+<li>Fregly, <em>AI Systems Performance Engineering</em>: Ch. 2 (SMs, threads, warps — the hardware this module runs on), Ch. 6 §"Threads, Warps, Blocks, and Grids".</li>
+</ul>
+</div>
+<div class="pager"><a href="../">&larr; Track overview</a><span class="spacer"></span><a href="../02-memory-hierarchy/">02 · Memory hierarchy &rarr;</a></div>
+<footer class="site">
+  Part of <a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp">ai-infra-gpu-engineering-ramp</a>
+  — a documented AI infrastructure learning journey. Site rebuilt from the repo's markdown by
+  <a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp/blob/main/tools/build_site.py">tools/build_site.py</a>.
+</footer>
+</div>
+</body>
+</html>

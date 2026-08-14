@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>07 · Asynchrony & overlap — C++ ↔ CUDA Track</title>
+<link rel="stylesheet" href="../../site.css">
+</head>
+<body>
+<div class="wrap">
+<nav class="sitenav">
+  <a class="brand" href="../../">AI Infra &amp; GPU Ramp</a>
+  <a href="../../">Home</a>
+  <a href="../../how-machines-learn/">ML Foundations</a>
+  <a href="../../track/" class="here">C++&hairsp;&harr;&hairsp;CUDA Track</a>
+  <a href="../../glossary/">Glossary</a>
+  <a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp">GitHub</a>
+</nav>
+<div class="metastrip">
+  <span class="badge stageC">Stage C</span>
+  <span>&#8987; ~3h</span>
+  <span>&#128280; prerequisites: <a href="../06-matmul-tiling/">module 06</a></span>
+  <span>&#128193; <a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp/blob/main/cpp-cuda-track/07-async-overlap">lab source on GitHub</a></span>
+</div>
+<div class="content">
+<h1>07 — Asynchrony &amp; Overlap: thread pools vs streams</h1>
+<p>Everything so far ran one thing at a time. Real systems overlap: compute with
+data movement, compute with compute, CPU work with GPU work. This module is the
+direct ancestor of "overlap communication with computation" — the phrase you'll
+meet again in DDP/FSDP.</p>
+<h2>Concept</h2>
+<p><strong>CPU:</strong> <code>std::async</code>/futures for one-shot tasks, thread pools + queues for
+throughput, C++20 coroutines for structuring it. Overlap is the <em>default</em> (the
+OS runs anything runnable); your job is dependency management.</p>
+<p><strong>GPU:</strong> the inversion — <em>everything is already async</em> with respect to the host.
+A kernel launch queues work and returns immediately; <code>cudaMemcpy</code> is the odd one
+out (it blocks). The ordering tool is the <strong>stream</strong>: a FIFO queue of GPU work.
+Same stream ⇒ ordered; different streams ⇒ may overlap (copy engines run
+concurrently with SMs). <strong>Events</strong> are the cross-stream sync primitive
+(<code>record</code> in one stream, <code>wait</code> in another). <strong>CUDA Graphs</strong> capture a whole
+DAG of launches and replay it with near-zero CPU overhead — the fix for
+launch-bound workloads (small kernels, big models — this is why
+<code>torch.cuda.CUDAGraph</code> and vLLM's graph capture exist).</p>
+<p>The canonical exercise — <strong>chunked pipelined transfer</strong>: split a big array into
+chunks; stream k does H2D(k), kernel(k), D2H(k). With pinned memory and 3+
+streams, transfer hides behind compute almost entirely.</p>
+<h2>Confrontation</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Question</th>
+<th>C++</th>
+<th>CUDA</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Unit of scheduled work</td>
+<td>task/callable</td>
+<td>kernel launch / memcpy</td>
+</tr>
+<tr>
+<td>Ordering primitive</td>
+<td>future, latch, queue</td>
+<td>stream (FIFO), event</td>
+</tr>
+<tr>
+<td>What's async by default</td>
+<td>nothing (you opt in)</td>
+<td>everything device-side (host opts <em>out</em> via sync)</td>
+</tr>
+<tr>
+<td>Overlap copy &amp; compute</td>
+<td>DMA is implicit</td>
+<td>needs pinned memory + separate streams</td>
+</tr>
+<tr>
+<td>Amortize dispatch overhead</td>
+<td>batch tasks, avoid tiny tasks</td>
+<td>CUDA Graphs</td>
+</tr>
+<tr>
+<td>Deadlock flavor</td>
+<td>lock cycles</td>
+<td>stream waiting on itself via event misuse</td>
+</tr>
+</tbody>
+</table></div>
+<h2>Exercises</h2>
+<ol>
+<li>Pipelined transfer: process 1 GB in 1/2/4/8 chunks with that many streams.
+   Plot wall time vs chunk count; find where overlap saturates. Repeat with
+   pageable (non-pinned) memory and observe overlap silently vanish (the copy
+   engine can't DMA pageable memory).</li>
+<li>Nsight Systems (<code>nsys profile ./a.out</code>) on exercise 1 — the timeline showing
+   copy/compute overlap is the single most useful picture in GPU engineering.
+   Screenshot it into your NOTES.md.</li>
+<li>CPU mirror: overlap file reads with processing using a 2-thread
+   producer/consumer queue; then with <code>std::async</code>. Note which was easier to
+   get right and why.</li>
+<li>Launch a 1 µs kernel 10 000 times in a loop; measure. Capture the same loop
+   in a CUDA Graph and replay. The ratio you see is why graphs exist.</li>
+</ol>
+<h2>Lab</h2>
+<ul>
+<li><a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp/blob/main/cpp-cuda-track/07-async-overlap/cpp/overlap_pipeline.cpp"><code>cpp/overlap_pipeline.cpp</code></a> — exercise 3 (serial vs double-buffered fetch/compute pipeline). Build: <code>g++ -O3 -std=c++20 -pthread cpp/overlap_pipeline.cpp -o overlap_cpu</code></li>
+<li><a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp/blob/main/cpp-cuda-track/07-async-overlap/cuda/streams_pipeline.cu"><code>cuda/streams_pipeline.cu</code></a> — exercises 1 &amp; 4 (1/2/4/8-stream pipelined transfer; 10k-launch loop vs CUDA Graph). Build: <code>nvcc -O3 -arch=native cuda/streams_pipeline.cu -o streams_gpu</code></li>
+</ul>
+<h2>Companion reading</h2>
+<ul>
+<li>Fregly, <em>AI Systems Performance Engineering</em>: Ch. 11 (streams, stream-ordered allocator, events, CUDA Graphs — this module, production-grade), Ch. 12 §"Batch Repeated Kernel Launches with CUDA Graphs".</li>
+</ul>
+</div>
+<div class="pager"><a href="../06-matmul-tiling/">&larr; 06 · Matmul & tiling</a><span class="spacer"></span><a href="../08-sync-atomics-memory-model/">08 · Sync, atomics, memory model &rarr;</a></div>
+<footer class="site">
+  Part of <a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp">ai-infra-gpu-engineering-ramp</a>
+  — a documented AI infrastructure learning journey. Site rebuilt from the repo's markdown by
+  <a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp/blob/main/tools/build_site.py">tools/build_site.py</a>.
+</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>06 · Matmul & tiling — C++ ↔ CUDA Track</title>
+<link rel="stylesheet" href="../../site.css">
+</head>
+<body>
+<div class="wrap">
+<nav class="sitenav">
+  <a class="brand" href="../../">AI Infra &amp; GPU Ramp</a>
+  <a href="../../">Home</a>
+  <a href="../../how-machines-learn/">ML Foundations</a>
+  <a href="../../track/" class="here">C++&hairsp;&harr;&hairsp;CUDA Track</a>
+  <a href="../../glossary/">Glossary</a>
+  <a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp">GitHub</a>
+</nav>
+<div class="metastrip">
+  <span class="badge stageB">Stage B</span>
+  <span>&#8987; ~4h</span>
+  <span>&#128280; prerequisites: <a href="../05-scan-histogram/">module 05</a></span>
+  <span>&#128193; <a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp/blob/main/cpp-cuda-track/06-matmul-tiling">lab source on GitHub</a></span>
+</div>
+<div class="content">
+<h1>06 — Matmul: the op the hardware is built around</h1>
+<p>C = A·B, the first op in this track with <strong>data reuse</strong> (each element is read N
+times) — which means the first op where the memory hierarchy, not bandwidth,
+decides everything, and the first where you can approach <em>compute</em> peak. It is
+also, of course, ~95 % of a transformer's FLOPs.</p>
+<h2>Concept</h2>
+<p>Arithmetic intensity of matmul grows with tile size: a T×T tile does O(T³) math
+on O(T²) data. Both stacks exploit this identically in principle — <strong>keep a tile
+in the fast tier, do all its math, move on</strong> — with different fast tiers:</p>
+<p><strong>CPU:</strong> cache blocking. Loop order (i,k,j) or (i,j,k)-blocked so that a block
+of A stays in L1/L2 and a strip of B streams through. Add OpenMP across the
+outer loop, and the compiler vectorizes the inner one. Getting past ~20 % of
+peak by hand is real work — which is why BLAS (OpenBLAS/MKL) exists.</p>
+<p><strong>GPU:</strong> shared-memory tiling. Each block cooperatively loads a tile of A and a
+tile of B into shared memory (coalesced!), syncs, computes the partial products
+from registers, syncs, slides to the next K-tile. This classic kernel reaches
+maybe 30–50 % of FP32 peak. The rest of the distance to peak is <strong>tensor
+cores</strong> — dedicated matrix units consuming 16×16-ish fragments (WMMA API, or
+WGMMA + TMA on Hopper) — and that's cuBLAS/CUTLASS territory, covered in
+module 10.</p>
+<h2>Confrontation</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Question</th>
+<th>C++</th>
+<th>CUDA</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fast tier for the tile</td>
+<td>L1/L2 (implicit, pray)</td>
+<td>shared memory (explicit)</td>
+</tr>
+<tr>
+<td>Tile residency guaranteed?</td>
+<td>no — eviction is hardware's call</td>
+<td>yes — it's your scratchpad</td>
+</tr>
+<tr>
+<td>Inner-loop engine</td>
+<td>AVX-512 FMA (16 fl/instr)</td>
+<td>FFMA, or tensor core fragment op</td>
+</tr>
+<tr>
+<td>Hand-written vs library gap</td>
+<td>~5–10× vs MKL</td>
+<td>~2–4× vs cuBLAS (FP32), ~10×+ vs TC</td>
+</tr>
+<tr>
+<td>Library</td>
+<td>OpenBLAS / MKL / BLIS</td>
+<td>cuBLAS / CUTLASS</td>
+</tr>
+</tbody>
+</table></div>
+<h2>Build &amp; run</h2>
+<pre><code class="language-bash">g++ -O3 -std=c++20 -fopenmp -march=native cpp/matmul.cpp -o matmul_cpu &amp;&amp; ./matmul_cpu
+nvcc -O3 -arch=native cuda/matmul.cu -o matmul_gpu &amp;&amp; ./matmul_gpu
+</code></pre>
+<h2>Exercises</h2>
+<ol>
+<li>Both files implement naive and tiled variants. Measure GFLOP/s for all four;
+   compute % of your chips' FP32 peak (cores × freq × SIMD × 2, and SMs × freq ×
+   cores/SM × 2).</li>
+<li>Sweep the GPU tile size (16/32) and block shape; find your GPU's sweet spot.
+   Then sweep CPU block size against your L1/L2 sizes (<code>getconf -a | grep CACHE</code>).</li>
+<li>Link cuBLAS (<code>nvcc -lcublas</code>, call <code>cublasSgemm</code>) and MKL/OpenBLAS
+   (<code>-lopenblas</code>, call <code>cblas_sgemm</code>). Fill the final row of your table. Sit
+   with the humility.</li>
+<li>In the GPU kernel, remove one <code>__syncthreads()</code> and run under
+   <code>compute-sanitizer --tool racecheck</code>. This is module 08's cliffhanger.</li>
+</ol>
+<h2>Companion reading</h2>
+<ul>
+<li>Fregly, <em>AI Systems Performance Engineering</em>: Ch. 9 (multi-level micro-tiling, kernel fusion, CUTLASS — the chapters between this module's kernel and cuBLAS).</li>
+<li>Ultra-Scale Playbook: the arithmetic-intensity / kernel sections — same tiling story told from the LLM-training side.</li>
+</ul>
+</div>
+<div class="pager"><a href="../05-scan-histogram/">&larr; 05 · Scan & histogram</a><span class="spacer"></span><a href="../07-async-overlap/">07 · Asynchrony & overlap &rarr;</a></div>
+<footer class="site">
+  Part of <a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp">ai-infra-gpu-engineering-ramp</a>
+  — a documented AI infrastructure learning journey. Site rebuilt from the repo's markdown by
+  <a href="https://github.com/trocca/ai-infra-gpu-engineering-ramp/blob/main/tools/build_site.py">tools/build_site.py</a>.
+</footer>
+</div>
+</body>
+</html>
