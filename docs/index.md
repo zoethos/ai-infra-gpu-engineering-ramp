@@ -12,6 +12,7 @@ training across GPUs — every lesson backed by runnable code you can measure yo
 {: .fs-5 .fw-300 }
 
 [Start the track](track/){: .btn .btn-primary }
+[Math for AI](math/){: .btn }
 [ML foundations chapter](how-machines-learn/){: .btn }
 [Glossary](glossary/){: .btn }
 
@@ -22,6 +23,9 @@ training across GPUs — every lesson backed by runnable code you can measure yo
 - **New to machine learning?** Read [How Machines Learn from Data](how-machines-learn/)
   first: features, training vs inference, the learning paradigms, and the modern LLM
   workflow — no code required.
+- **Want the math under it?** [Math for AI](math/): linear algebra & matmul, gradients
+  & the chain rule, logits & softmax, SGD → AdamW — each page mapped to its chapter of
+  the MML book.
 - **Here for the systems side?** Jump into the [C++ ↔ CUDA dual track](track/) and keep
   the [glossary](glossary/) in a tab.
 
